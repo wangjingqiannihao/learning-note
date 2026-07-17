@@ -59,8 +59,7 @@ set -e
 IMAGES="alpine:3.20 busybox:1.36 hello-world:latest"
 
 # 把变量里的镜像名转换成逐行输入，再交给 xargs 并发执行
-printf '%s
-' $IMAGES | xargs -P 4 -I {} sh -c '
+printf '%s\n' $IMAGES | xargs -P 4 -I {} sh -c '
   # 内层子进程遇到错误立即退出
   set -e
 
@@ -97,8 +96,7 @@ IMAGES="alpine:3.20 busybox:1.36 hello-world:latest"
 max_parallel="${1:-4}"
 
 # 使用 xargs 按指定并发数拉取镜像
-printf '%s
-' $IMAGES | xargs -P "$max_parallel" -I {} sh -c '
+printf '%s\n' $IMAGES | xargs -P "$max_parallel" -I {} sh -c '
   # 内层子进程遇到错误立即退出
   set -e
 
@@ -116,7 +114,7 @@ printf '%s
 ' sh {}
 ```
 
-执行方式如下。
+执行方式如下：
 
 ```sh
 # 使用默认并发数 4
@@ -139,7 +137,7 @@ sh parallel-pull-images.sh 8
 
 ![并发拉取镜像验证截图](assets/parallel-pull-images-verify.png)
 
-验证命令如下。
+验证命令如下：
 
 ```sh
 # 定义镜像名列表变量
@@ -149,12 +147,34 @@ IMAGES="alpine:3.20 busybox:1.36 hello-world:latest"
 docker rmi $IMAGES || true
 
 # 实验 1：串行逐个拉取并计时
-/usr/bin/time -p sh -c 'set -e; IMAGES="alpine:3.20 busybox:1.36 hello-world:latest"; for image in $IMAGES; do echo "[$(date +%H:%M:%S)] exp1 serial pulling ${image}"; docker pull "${image}" >/dev/null; echo "[$(date +%H:%M:%S)] exp1 serial ok ${image}"; done'
+/usr/bin/time -p sh <<'EOF'
+set -e
+
+IMAGES="alpine:3.20 busybox:1.36 hello-world:latest"
+
+for image in $IMAGES; do
+  echo "[$(date +%H:%M:%S)] exp1 serial pulling ${image}"
+  docker pull "${image}" >/dev/null
+  echo "[$(date +%H:%M:%S)] exp1 serial ok ${image}"
+done
+EOF
 
 # 实验 2：再次删除本地镜像，让并发测试也从拉取开始
 docker rmi $IMAGES || true
 
 # 实验 2：使用变量列表 + xargs 并发拉取并计时，并发数为 3
-/usr/bin/time -p sh -c 'set -e; IMAGES="alpine:3.20 busybox:1.36 hello-world:latest"; printf "%s
-" $IMAGES | xargs -P 3 -I {} sh -c '''set -e; image="$1"; echo "[$(date +%H:%M:%S)] exp2 parallel pulling ${image}"; docker pull "${image}" >/dev/null; echo "[$(date +%H:%M:%S)] exp2 parallel ok ${image}"''' sh {}'
+/usr/bin/time -p sh <<'EOF'
+set -e
+
+IMAGES="alpine:3.20 busybox:1.36 hello-world:latest"
+
+printf '%s\n' $IMAGES | xargs -P 3 -I {} sh -c '
+  set -e
+
+  image="$1"
+  echo "[$(date +%H:%M:%S)] exp2 parallel pulling ${image}"
+  docker pull "${image}" >/dev/null
+  echo "[$(date +%H:%M:%S)] exp2 parallel ok ${image}"
+' sh {}
+EOF
 ```
