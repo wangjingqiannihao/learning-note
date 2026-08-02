@@ -1,6 +1,6 @@
 # flannel 架构
 
-![flannel 架构图](images/flannel-architecture.png)
+![flannel 架构图](images/flannel架构.png)
 
 kube-apiserver 保存 Node 信息和 PodCIDR，是 kube-controller-manager 写入状态、flanneld 监听状态的统一入口。
 

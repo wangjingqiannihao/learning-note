@@ -106,7 +106,7 @@ EXIT pid=150367 comm=true filename=/bin/true
 
 ## 验证截图
 
-![eBPF 监听进程退出验证截图](images/ebpf-process-exit-verify.png)
+![eBPF 监听进程退出验证截图](images/eBPF监听进程退出验证.png)
 
 ## 结论
 
