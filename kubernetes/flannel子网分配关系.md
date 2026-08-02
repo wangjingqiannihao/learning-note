@@ -8,7 +8,7 @@
 
 flannel 使用 Kubernetes 作为子网管理后端时，也就是运行在 `kube-subnet-mgr` 模式时，会 watch Node 对象，并从 `podCIDR` 或 `podCIDRs` 读取本节点已经分配好的 Pod 子网。随后 flannel 根据该子网配置本节点的网络接口和路由规则。也就是说，flannel 负责消费和应用子网分配结果，自身不负责从集群大网段里切分和分配节点子网。
 
-![Kubernetes Node 子网分配与 flannel 使用关系](images/flannel-subnet-flow.png)
+![Kubernetes Node 子网分配与 flannel 使用关系](images/flannel子网分配流程.png)
 
 ## 2. `podCIDR` 与 `podCIDRs` 的关系
 

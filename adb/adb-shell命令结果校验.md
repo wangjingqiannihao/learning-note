@@ -310,7 +310,7 @@ printf 'function_exit_code=%s\n\n' "$?"
 printf 'result: all checks passed\n'
 ```
 
-![adb shell 判断命令执行结果验证截图](assets/adb-shell-verify.png)
+![adb shell 判断命令执行结果验证截图](images/adb-shell命令结果校验.png)
 
 ## 注意点
 

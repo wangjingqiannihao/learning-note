@@ -32,7 +32,7 @@ SpecialCPUs        = 28-31
 
 下面用一个简化图说明 CPU 预留区、业务区和特殊隔离区的关系。
 
-![CPU 三层隔离架构](assets/cpu-isolation-arch.png)
+![CPU 三层隔离架构](images/CPU隔离架构.png)
 
 这张图表达的是控制面分工：kubelet 负责 Pod cpuset，systemd 负责用户态 daemon 亲和性，IRQ affinity 负责硬中断入口，内核启动参数和工具负责降低内核线程、调度 tick、RCU callback 对特殊 CPU 的影响。
 

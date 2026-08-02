@@ -64,7 +64,7 @@ sudo quotaon -p /data
 
 关键验证截图：
 
-![quota 开启状态](assets/quota-enable-status.png)
+![quota 开启状态](images/quota启用状态.png)
 
 ### 4. 设置用户写入限制
 
@@ -105,7 +105,7 @@ sudo quota -u quotauser
 
 关键验证截图：
 
-![quota 写入超限](assets/quota-write-limit.png)
+![quota 写入超限](images/quota写入限制验证.png)
 
 验证结果说明：`test.bin` 最终大小为 6.0MiB，用户使用量达到硬限制 `6144`。继续写入时系统返回 `Disk quota exceeded`，证明 quota 已经阻止超限写入。
 
