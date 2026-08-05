@@ -29,6 +29,100 @@ Profile 显示，高并发一致性 LIST 的主要放大路径是 watch cache �
 
 kind 的 control-plane 是一个 Docker 容器，容器中同时运行 kube-apiserver、etcd、kube-controller-manager 和 kube-scheduler。因此 `docker stats` 展示的是整个 control-plane 容器的资源使用量；kube-apiserver 自身 CPU 需要结合 `process_cpu_seconds_total` 和 CPU Profile 计算。
 
+## 并发量的含义
+
+并发量表示同一时刻最多维持多少个正在执行或等待返回的请求，不表示所有请求会在完全相同的时刻到达。例如 `c=500、n=10000` 表示压测程序启动 500 个执行单元，最多同时存在约 500 个在途请求，整轮累计发送 10000 个请求。开始时第一批约 500 个请求会快速发出；某个请求返回后，对应执行单元立即发送下一个请求，持续滚动直到完成目标请求数。
+
+| 参数 | 含义 |
+|---|---|
+| `c=500` | 同一时刻最多维持约 500 个正在执行或等待返回的 LIST 请求 |
+| `n=10000` | 整轮测试累计发送 10000 个请求，不是一次性同时发送 10000 个请求 |
+| `duration=45s` | Profile 场景不限制固定请求数，由各执行单元在 45 秒内持续循环发送请求 |
+| RPS | 每秒实际完成的请求数，不等于并发量 |
+| 请求延迟 | 单个请求从发出到返回，或服务端从接收到处理完成的墙钟时间 |
+
+并发量也不等于 kube-apiserver 内部实际执行数量。请求到达后先经过 APF；当可执行额度已满时，剩余请求会进入 APF 队列，队列也满后返回 HTTP 429。因此设置 `c=1000` 只表示客户端最多维持约 1000 个在途请求，不表示 kube-apiserver 会同时执行 1000 个请求。
+
+## 性能测试数据如何获得
+
+本次 LIST 性能数据不是通过 Jaeger 采集。测试环境没有配置 OpenTelemetry Tracing，也没有部署 Jaeger。数据来自三部分：压测客户端记录的端到端结果、kube-apiserver `/metrics` 的服务端指标，以及 `/debug/pprof` 采集的 CPU、goroutine 和 Block Profile。
+
+### 客户端延迟、状态码和 RPS
+
+压测程序通过 TLS/HTTP/2 直连 kube-apiserver，并复用连接。每个执行单元在请求发出前记录 `time.Now()`，读取并关闭响应体后使用 `time.Since()` 得到端到端墙钟时间，同时记录 HTTP 状态码。压测结束后，将成功请求的耗时排序并计算 P50、P95 和 P99；HTTP 429 单独计数；成功 RPS 使用成功请求数除以压测持续时间计算。
+
+```go
+startedAt := time.Now()
+resp, err := client.Do(req)
+latency := time.Since(startedAt)
+
+// 必须读取并关闭响应体，HTTP/2 连接才能稳定复用。
+if resp != nil {
+    _, _ = io.Copy(io.Discard, resp.Body)
+    _ = resp.Body.Close()
+}
+
+// 记录 latency、resp.StatusCode，并在测试结束后计算分位数和 RPS。
+```
+
+客户端耗时包含客户端调度、请求传输、kube-apiserver 处理、响应传输和响应体读取，因此不能直接当作 kube-apiserver 服务端处理时间。
+
+### kube-apiserver 服务端指标
+
+每轮压测前后各保存一次 kube-apiserver `/metrics`，通过计数器增量计算该轮数据。采集命令如下，两个命令分别在压测前和压测后执行。
+
+```bash
+kubectl get --raw='/metrics' > metrics-before.txt
+```
+
+```bash
+kubectl get --raw='/metrics' > metrics-after.txt
+```
+
+Namespace LIST 的服务端平均耗时通过 `apiserver_request_duration_seconds_sum` 与 `apiserver_request_duration_seconds_count` 的前后增量计算：
+
+```text
+服务端平均耗时
+= Δapiserver_request_duration_seconds_sum
+  / Δapiserver_request_duration_seconds_count
+```
+
+APF 平均排队时间使用 `apiserver_flowcontrol_request_wait_duration_seconds_sum` 和对应 count 的增量计算。`apiserver_flowcontrol_current_inqueue_requests` 与 `apiserver_flowcontrol_current_executing_requests` 是瞬时 Gauge，需要在压测期间定时抓取，不能只比较压测前后值。本轮表格中的最大排队数来自压测窗口内的周期采样最大值。
+
+进程 CPU 使用量通过 `process_cpu_seconds_total` 的前后增量除以压测持续时间计算，结果表示该窗口平均使用的 CPU 核数。内存分配速率使用 `go_memstats_alloc_bytes_total` 的增量除以持续时间计算；`go_memstats_heap_alloc_bytes` 用于观察当前堆内存，而不是累计分配量。
+
+### CPU、goroutine 和阻塞数据
+
+pprof 必须在压测运行期间采集，否则只能看到空闲状态。CPU Profile 使用固定时间窗口；goroutine、Block 和 Mutex Profile 在同一压力窗口内抓取快照。
+
+```bash
+kubectl get --raw='/debug/pprof/profile?seconds=20' > cpu.pprof
+```
+
+```bash
+kubectl get --raw='/debug/pprof/goroutine' > goroutine.pprof
+```
+
+```bash
+kubectl get --raw='/debug/pprof/block' > block.pprof
+```
+
+```bash
+kubectl get --raw='/debug/pprof/mutex' > mutex.pprof
+```
+
+采集后使用 `go tool pprof` 分析函数 CPU 时间、goroutine 停留位置和累计阻塞时间。本文中 `watchCache.waitUntilFreshAndBlock` 的等待 goroutine 数量和阻塞占比来自 goroutine Profile 与 Block Profile，而不是客户端延迟或 Jaeger Span。
+
+整个采集链路可以表示为：
+
+```text
+压测客户端记录每次请求耗时和状态码
+→ 压测前后抓取 /metrics 并计算 Counter 增量
+→ 压测期间周期采样 APF Gauge
+→ 同一压力窗口采集 pprof
+→ 关联客户端延迟、服务端指标和代码调用栈
+```
+
 ## 为什么不能只看 kubectl 耗时
 
 串行创建 30 个 Namespace 时，客户端观测结果如下。
