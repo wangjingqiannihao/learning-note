@@ -1,6 +1,6 @@
-# kube-apiserver 单次请求延迟与高并发性能分析
+# kube-apiserver高并发List请求分析
 
-> 本文基于 Kubernetes `v1.34.0` 和本地 kind 单控制面集群验证，分析 kube-apiserver 从低并发到过载过程中的延迟变化，并结合 CPU、goroutine 和 Block Profile 定位执行资源消耗。测试请求为 `GET /api/v1/namespaces`，压测程序使用 kubeconfig 客户端证书，通过 TLS/HTTP/2 直连 kube-apiserver。
+> 本文基于 Kubernetes `v1.34.0` 和本地 kind 单控制面集群验证，分析持续 Namespace LIST 请求从低并发到过载过程中的延迟变化，并结合 CPU、goroutine 和 Block Profile 定位执行资源消耗。测试请求为 `GET /api/v1/namespaces`，压测程序使用 kubeconfig 客户端证书，通过 TLS/HTTP/2 直连 kube-apiserver。文中的压测数据和结论仅适用于该 LIST 场景，不能直接外推到单对象 GET、CREATE、UPDATE、DELETE 或 WATCH。
 
 ## 结论
 
