@@ -117,7 +117,7 @@ func (p *LocalPathProvisioner) Delete(
 
 ![local-path-provisioner 动态创建卷时序](images/local-path-provisioning-sequence.png)
 
-当 StorageClass 使用 `WaitForFirstConsumer` 时，PVC 创建后暂不立即供给。Pod 出现后，Scheduler 选择目标节点，ProvisionController 从供给上下文的 `opts.SelectedNode` 获得节点信息，再调用 `LocalPathProvisioner.Provision()`。
+当 StorageClass 使用 `WaitForFirstConsumer` 时，PVC 创建后暂不立即供给。Pod 进入调度流程后，Scheduler 先预选一个同时满足计算资源和存储拓扑约束的节点，并将该节点写入 PVC 的 `volume.kubernetes.io/selected-node` 注解；此时 PV 尚未创建，Pod 也尚未完成最终绑定。ProvisionController 监听到 PVC 更新后，从供给上下文的 `opts.SelectedNode` 获得该节点，再调用 `LocalPathProvisioner.Provision()`。待本地目录准备完成、PV 创建且 PVC/PV 绑定后，Scheduler 才将 Pod 最终绑定到之前预选的节点。
 
 ### 4.1 选择节点与路径
 
