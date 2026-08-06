@@ -10,7 +10,9 @@
 
 ## 1. CSI 组件分工
 
-CSI 插件通过 Unix Socket 提供 gRPC 服务。其中，Controller Service 由 external-provisioner 等 CSI Sidecar 容器调用，Node Service 由 kubelet 调用。Identity Service 返回插件名称、版本和能力；Controller Service 管理卷的创建与删除；Node Service 负责把卷挂载到业务 Pod 所在节点。
+CSI 插件通过 Unix Socket 提供 gRPC 服务。在本示例中，external-provisioner 调用 Controller Service 的 CreateVolume、DeleteVolume 等接口，kubelet 调用 Node Service 完成卷在节点上的挂载和卸载。Identity Service 返回插件名称、版本和能力；Controller Service 管理卷的创建与删除；Node Service 负责把卷挂载到业务 Pod 所在节点。
+
+external-provisioner 不是 kube-controller-manager 的内置组件，而是随 CSI 驱动独立部署的 CSI Sidecar 容器。kube-controller-manager 中的 PersistentVolume Controller 负责监控 PVC、PV 的状态并协调绑定关系，但不会通过 CSI 接口直接创建后端卷。当 PVC 使用 CSI StorageClass 请求动态供给时，external-provisioner 从 API Server 监听到相关 PVC，调用 CSI Controller Service 的 CreateVolume；调用成功后，external-provisioner 再向 API Server 创建对应的 PV，随后 PersistentVolume Controller 协调 PVC 与 PV 完成绑定。
 
 本示例将每个卷映射为节点上的一个目录：
 
@@ -416,4 +418,4 @@ kubectl --context kind-test logs simple-csi-test
 
 当前实现只把 PVC 请求容量写入 CSI 返回值，没有进行磁盘配额限制；也没有实现 `ControllerExpandVolume`、`NodeExpandVolume`、快照、卷统计和健康检测。生产实现还需要更严格的幂等处理、挂载点检测、并发控制、路径校验、错误恢复和安全隔离。
 
-本示例为了减少组件数量，让 external-provisioner 与 Node 插件一起以 DaemonSet 运行，并通过 leader election 保证只有一个 provisioner 工作。生产环境通常将 Controller 插件及其 CSI Sidecar 容器部署为独立 Deployment，将 Node 插件和 node-driver-registrar 部署为 DaemonSet。
+本样例没有单独部署 CSI Controller Pod，插件进程同时实现 Controller Service 和 Node Service，external-provisioner 通过 Unix Socket 调用其中的 Controller Service。这种方式便于教学：每个节点都运行一份 Controller Service，并依靠 external-provisioner 的 leader election 保证只有一个实例真正处理 PVC；但在生产环境中，通常会把 Controller 插件独立部署为 Deployment，把 Node 插件部署为 DaemonSet。
