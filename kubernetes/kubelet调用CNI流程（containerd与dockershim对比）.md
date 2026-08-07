@@ -2,7 +2,7 @@
 
 ## 结论
 
-Kubelet 通常不直接执行 CNI 插件。它通过 CRI 发起 Pod Sandbox 创建请求，再由 CRI 实现负责调用 CNI：containerd 场景由 containerd 的 CRI 插件调用 CNI；dockershim 场景由 Kubelet 内置的 dockershim 调用 CNI。
+Kubelet 不会直接执行 CNI 插件。它通过 CRI 发起 Pod Sandbox 创建请求，再由 CRI 实现负责调用 CNI：containerd 场景由 containerd 的 CRI 插件调用 CNI；dockershim 场景由 Kubelet 内置的 dockershim 调用 CNI。
 
 两种实现的共同点是：CNI 只为 Pod Sandbox 配置一次网络，业务容器随后共享 Sandbox 的网络命名空间，不会逐个调用 CNI。
 
@@ -10,6 +10,68 @@ Kubelet 通常不直接执行 CNI 插件。它通过 CRI 发起 Pod Sandbox 创�
 | --- | --- | --- |
 | containerd | Kubelet → CRI gRPC → containerd CRI 插件 → CNI | containerd CRI 插件 |
 | dockershim | Kubelet → dockershim → CNI | dockershim |
+
+对于 Pod IP，CNI/IPAM 负责把地址配置到 Pod 网络命名空间；运行时再从 CNI 执行结果或网络命名空间中取得地址，通过 `PodSandboxStatus` 返回给 Kubelet。containerd 会把 Pod IP 作为 Sandbox 网络元数据持久化；dockershim 场景中的 Docker Engine 不会把 CNI 配置的 Pod IP 当作 Docker/libnetwork 网络地址保存。
+
+## Pod IP 的获取与保存
+
+![containerd 与 dockershim 获取和保存 Pod IP 的时序](images/pod-ip-persistence-containerd-dockershim.png)
+
+### containerd
+
+containerd 的 CRI 实现在 CNI 配置成功后取得 Pod IP。不同版本的具体实现可能从 CNI Result 选择地址，也可能检查 Sandbox 网络命名空间中的默认接口。随后，主 IP、附加 IP、NetNS 路径和 CNI 执行结果等信息会进入 Sandbox 网络元数据。
+
+默认配置下，持久化数据位于 containerd `root` 目录中的元数据数据库：
+
+```text
+/var/lib/containerd/io.containerd.metadata.v1.bolt/meta.db
+```
+
+如果 `/etc/containerd/config.toml` 修改了 `root`，路径应相应替换为：
+
+```text
+<root>/io.containerd.metadata.v1.bolt/meta.db
+```
+
+Pod IP 并不是以单独文本文件保存，而是位于 `k8s.io` namespace 下的 Sandbox/container 元数据中。不同 containerd 大版本的对象模型和元数据编码可能不同，不应直接修改 BoltDB。
+
+可以先列出 Pod Sandbox，获取目标 Sandbox ID：
+
+```bash
+crictl pods
+```
+
+然后查看该 Sandbox 的完整状态：
+
+```bash
+crictl inspectp <sandbox-id>
+```
+
+`inspectp` 中的 `p` 表示 Pod Sandbox，不同于查看普通容器使用的 `crictl inspect <container-id>`。返回结果中的 `status.network.ip` 和 `status.network.additionalIps` 分别表示主 IP 和附加 IP。只查看主 IP 时可以执行：
+
+```bash
+crictl inspectp <sandbox-id> | jq -r '.status.network.ip'
+```
+
+如果没有配置默认 CRI endpoint，需要在命令中指定 `--runtime-endpoint`，或者在 `/etc/crictl.yaml` 中配置运行时端点。
+
+### Docker 与 dockershim
+
+Docker 自己通过 libnetwork 创建网络时，会保存容器 IP；`docker inspect` 可以在 `NetworkSettings.Networks` 中看到地址，网络状态通常由 Docker 数据目录中的 libnetwork 数据库管理。
+
+Kubernetes 使用 dockershim 和 CNI 时则不同。Docker Engine 主要负责创建和运行 Pause 容器，CNI 在 Pause 容器持有的网络命名空间中配置 Pod IP。该地址不是 Docker/libnetwork 分配的，因此 Docker 不会把它保存到自己的容器网络元数据中，`NetworkSettings.IPAddress` 不能作为 Kubernetes Pod IP 的来源。
+
+dockershim 通过检查 Sandbox 网络命名空间取得 Pod IP，再经 CRI 返回给 Kubelet。排查这类环境时，应以 `crictl inspectp`、Kubernetes Pod 状态和 NetNS 内接口地址为准，而不是只看 `docker inspect`。
+
+### 保存位置对比
+
+| 场景 | IP 配置方 | 主要记录位置 | 推荐查询方式 |
+| --- | --- | --- | --- |
+| containerd + CNI | CNI/IPAM | containerd Sandbox 元数据；默认在 `io.containerd.metadata.v1.bolt/meta.db` | `crictl inspectp <sandbox-id>` |
+| dockershim + CNI | CNI/IPAM | Pause 容器的 NetNS；CNI/IPAM 可能另有分配状态 | `crictl inspectp <sandbox-id>`、进入 NetNS 查看接口 |
+| Docker 原生网络 | Docker/libnetwork | Docker 网络状态数据库及容器网络元数据 | `docker inspect <container-id>` |
+
+需要注意，`/var/lib/cni/` 下的内容通常是 CNI/IPAM 的地址分配或缓存状态，作用是避免地址重复分配、支持删除和恢复；它不等同于 containerd 保存并通过 CRI 返回的 Sandbox Pod IP 元数据。
 
 ## containerd 场景
 
