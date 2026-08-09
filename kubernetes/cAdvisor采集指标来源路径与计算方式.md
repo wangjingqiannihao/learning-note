@@ -6,7 +6,7 @@ cAdvisor 的核心工作是把 Linux 内核暴露的 cgroup、procfs、sysfs 和
 
 本文以开源组件 **cAdvisor v0.49.1** 的常见指标口径为说明对象。不同 Kubernetes、内核、cgroup v1/v2、容器运行时和 cAdvisor 版本会带来字段名和暴露指标的细节差异，但整体计算思路一致。
 
-![cAdvisor 指标采集时序](images/cadvisor-metric-source-sequence.png)
+![cAdvisor 指标采集时序](images/cAdvisor指标采集时序图.png)
 
 ## 指标采集的基本路径
 
