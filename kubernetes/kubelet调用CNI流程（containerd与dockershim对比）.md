@@ -15,7 +15,7 @@ Kubelet 不会直接执行 CNI 插件。它通过 CRI 发起 Pod Sandbox 创建�
 
 ## Pod IP 的获取与保存
 
-![containerd 与 dockershim 获取和保存 Pod IP 的时序](images/pod-ip-persistence-containerd-dockershim.png)
+![containerd 与 dockershim 获取和保存 Pod IP 的时序](images/容器网络地址持久化对比图.png)
 
 ### containerd
 
@@ -77,7 +77,7 @@ dockershim 通过检查 Sandbox 网络命名空间取得 Pod IP，再经 CRI 返
 
 ### Pod 创建流程
 
-![containerd 场景下 kubelet 调用 CNI 流程](images/kubelet-cni-containerd-flow.png)
+![containerd 场景下 kubelet 调用 CNI 流程](images/节点网络插件容器运行时调用流程图.png)
 
 containerd 通常从 `/etc/cni/net.d/` 加载网络配置，从 `/opt/cni/bin/` 查找插件程序。执行 CNI 时，关键输入包括 Sandbox ID、网络命名空间路径、容器内接口名（通常是 `eth0`）以及 Kubernetes Pod 元数据。
 
@@ -91,7 +91,7 @@ Kubelet 调用 `StopPodSandbox` 后，containerd CRI 插件通过 CNI `DEL` 清�
 
 ### Pod 创建流程
 
-![dockershim 场景下 kubelet 调用 CNI 流程](images/kubelet-cni-dockershim-flow.png)
+![dockershim 场景下 kubelet 调用 CNI 流程](images/节点网络插件调用流程对比图.png)
 
 Docker Engine 负责容器生命周期，但不负责实现 Kubernetes 的 CNI 网络配置。dockershim 在 Pause 容器启动后找到其网络命名空间，再调用 CNI。业务容器创建时使用共享容器网络命名空间的方式加入 Pause 容器，因此同一 Pod 内的容器共享 IP、路由、接口和端口空间。
 

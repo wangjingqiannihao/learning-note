@@ -8,7 +8,7 @@ KubeVirt 通过 Kubernetes CRD 和控制器，把虚拟机纳入 Kubernetes 的�
 
 ## 1. KubeVirt 基本架构
 
-![KubeVirt 架构图](images/kubevirt-architecture.png)
+![KubeVirt 架构图](images/虚拟化架构图.png)
 
 KubeVirt 不会替代 Kubernetes，也没有重新实现 Hypervisor。它在 Kubernetes 控制面与 QEMU/KVM 数据面之间增加了一层虚拟机资源模型和协调逻辑。
 
@@ -38,7 +38,7 @@ KubeVirt 不会替代 Kubernetes，也没有重新实现 Hypervisor。它在 Kub
 
 ## 2. 虚拟机创建时序
 
-![KubeVirt 虚拟机创建时序图](images/kubevirt-vm-create-sequence.png)
+![KubeVirt 虚拟机创建时序图](images/虚拟机创建时序图.png)
 
 用户创建 VM 后，请求首先进入 `kube-apiserver`。`kube-apiserver` 调用 `virt-api` 提供的准入 Webhook，完成默认值填充和合法性校验，随后将 VM 对象持久化到 etcd。
 
@@ -68,7 +68,7 @@ kubectl describe vmi <vm-name>
 
 ## 3. 虚拟机删除时序
 
-![KubeVirt 虚拟机删除时序图](images/kubevirt-vm-delete-sequence.png)
+![KubeVirt 虚拟机删除时序图](images/虚拟机删除时序图.png)
 
 用户删除 VM 后，API Server 为对象设置 `deletionTimestamp`，Kubernetes 与 KubeVirt 开始执行 finalizer 和 OwnerReference 级联清理。`virt-controller` 不再维持该 VM 的运行状态，并删除关联 VMI。
 
@@ -93,7 +93,7 @@ kubectl get vm,vmi,pod -w
 
 ## 4. 虚拟机在线迁移时序
 
-![KubeVirt 虚拟机在线迁移时序图](images/kubevirt-vm-migration-sequence.png)
+![KubeVirt 虚拟机在线迁移时序图](images/虚拟机迁移时序图.png)
 
 在线迁移通过 `VirtualMachineInstanceMigration` 发起。`virt-controller` 首先检查 VMI 是否满足迁移条件，然后创建目标 `virt-launcher Pod`。调度器把目标 Pod 放到符合 CPU、设备、网络和存储约束的节点上，目标端准备好运行环境后，源端与目标端建立迁移通道。
 

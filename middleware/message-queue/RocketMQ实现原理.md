@@ -14,7 +14,7 @@ RocketMQ 的核心设计可以概括为：**NameServer 管路由，Broker 管数
 
 ## 整体架构
 
-![RocketMQ 整体架构与消息存储、消费链路](images/rocketmq-architecture.png)
+![RocketMQ 整体架构与消息存储、消费链路](images/消息队列架构图.png)
 
 RocketMQ 由 NameServer、Broker、Producer 和 Consumer 四类核心角色组成。
 

@@ -6,7 +6,7 @@
 
 因此，这组测试的关键结论是：etcd 写入能力存在稳定吞吐上限，超过该上限后，继续增加并发主要增加排队时间，而不是提升有效吞吐。并发 1000 时，QPS 为 8534.3，和并发 256 基本持平，但 p95 从 118.14ms 升到 484.68ms，p99 从 160.12ms 升到 562.05ms。
 
-![并发量与QPS及延迟关系](images/etcd-concurrency-qps-latency.png)
+![并发量与QPS及延迟关系](images/键值存储并发写入性能图.png)
 
 | 并发 | 总写入 | 成功写入 | QPS | p50 | p95 | p99 | max |
 |---:|---:|---:|---:|---:|---:|---:|---:|
@@ -55,7 +55,7 @@ resp, err := cli.Txn(ctx).
 
 本次写入的资源不是一个真实 Kubernetes Pod 对象，而是压测程序构造的模拟资源。key 采用 Kubernetes 在 etcd 中常见的 registry 路径风格，例如 `/registry/pods/default/bench-128/1`，其中 `pods` 表示资源类型，`default` 表示命名空间，后面的编号表示本轮压测中的不同对象。value 使用 1024B 随机字节，作用是模拟对象经过序列化后写入 etcd 的 payload 大小。这样可以重点观察 etcd 写入链路本身的吞吐和延迟，而不引入 kube-apiserver admission、鉴权、对象校验、序列化等额外开销。
 
-![etcd Txn 写入链路](images/etcd-txn-write-sequence.png)
+![etcd Txn 写入链路](images/键值存储事务写入时序图.png)
 
 ## QPS 和并发量的含义
 

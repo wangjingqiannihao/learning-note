@@ -8,7 +8,7 @@ Tower Agent 和 Tower Server 都不适合仅通过增加 Deployment 副本数实
 
 ## 架构
 
-![KubeSphere Tower 联邦通道架构](images/kubesphere-tower-federation.png)
+![KubeSphere Tower 联邦通道架构](images/多集群联邦通道架构图.png)
 
 Tower Agent 主动连接 Host 集群中的 Tower Server。双方完成握手后建立受 SSH 保护的长连接，Host 集群访问成员集群 `kube-apiserver` 或 `ks-apiserver` 的请求通过该连接进行转发。
 

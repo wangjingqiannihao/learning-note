@@ -24,7 +24,7 @@ external-provisioner 不是 kube-controller-manager 的内置组件，而是随 
 
 ## 2. 工作时序
 
-![CSI 插件工作时序](images/csi-workflow-sequence.png)
+![CSI 插件工作时序](images/存储接口工作流时序图.png)
 
 创建 PVC 后，API Server 保存对象，external-provisioner 监听到 PVC 事件并调用 CSI Controller 的 `CreateVolume`。插件创建卷目录并返回 `volumeId`，随后 provisioner 创建 PV，使 PVC 与 PV 完成绑定。
 
@@ -390,11 +390,11 @@ kubectl --context kind-test exec simple-csi-test -- cat /data/result.txt
 
 PVC 与动态创建的 PV 均进入 `Bound` 状态，容量、访问模式和 StorageClass 与申请一致。
 
-![PVC 与 PV 绑定结果](images/csi-pvc-bound.png)
+![PVC 与 PV 绑定结果](images/存储卷声明绑定截图.png)
 
 删除测试 Pod 后重新创建，新 Pod 能读取此前写入的数据，说明 Pod 生命周期结束时只解除了挂载，并没有删除卷目录。
 
-![Pod 重建后的数据持久性验证](images/csi-persistence-test.png)
+![Pod 重建后的数据持久性验证](images/存储接口持久化验证截图.png)
 
 验证使用的命令如下：
 

@@ -49,7 +49,7 @@ kubelet 不与 LocalPathProvisioner 建立专用连接。PV 绑定完成后，ku
 
 ### 2.1 ProvisionController 与 PersistentVolume Controller 的关系
 
-![ProvisionController 与 PersistentVolume Controller 架构关系](images/local-path-controller-architecture.png)
+![ProvisionController 与 PersistentVolume Controller 架构关系](images/本地路径存储控制器架构图.png)
 
 ProvisionController 不属于 kube-controller-manager。它来自 `sigs.k8s.io/sig-storage-lib-external-provisioner/v11/controller`，由 local-path-provisioner 进程通过 `NewProvisionController()` 创建，并在该进程内运行。它负责监听与 `rancher.io/local-path` 匹配的 PVC、PV 和 StorageClass，维护动态供给工作队列，并回调 LocalPathProvisioner 实现的 `Provision()` 与 `Delete()`。
 
@@ -115,7 +115,7 @@ func (p *LocalPathProvisioner) Delete(
 
 ## 4. 动态创建卷时序
 
-![local-path-provisioner 动态创建卷时序](images/local-path-provisioning-sequence.png)
+![local-path-provisioner 动态创建卷时序](images/本地路径存储创建时序图.png)
 
 当 StorageClass 使用 `WaitForFirstConsumer` 时，PVC 创建后暂不立即供给。Pod 进入调度流程后，Scheduler 先预选一个同时满足计算资源和存储拓扑约束的节点，并将该节点写入 PVC 的 `volume.kubernetes.io/selected-node` 注解；此时 PV 尚未创建，Pod 也尚未完成最终绑定。ProvisionController 监听到 PVC 更新后，从供给上下文的 `opts.SelectedNode` 获得该节点，再调用 `LocalPathProvisioner.Provision()`。待本地目录准备完成、PV 创建且 PVC/PV 绑定后，Scheduler 才将 Pod 最终绑定到之前预选的节点。
 
@@ -251,7 +251,7 @@ NodePublishVolume
 
 ## 6. 删除卷时序
 
-![local-path-provisioner 删除卷时序](images/local-path-deletion-sequence.png)
+![local-path-provisioner 删除卷时序](images/本地路径存储删除时序图.png)
 
 PVC 被删除且 PV 的回收策略为 `Delete` 时，ProvisionController 调用 `LocalPathProvisioner.Delete()`。
 

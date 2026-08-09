@@ -19,7 +19,7 @@ PLEG 不直接读取 Pod IP。它负责发现 Sandbox 和容器的生命周期�
 
 ## 获取时序
 
-![Kubelet 创建或重新发现 Pod 时获取 Pod IP 的时序](images/kubelet-get-pod-ip.png)
+![Kubelet 创建或重新发现 Pod 时获取 Pod IP 的时序](images/节点组件获取容器网络地址流程图.png)
 
 ## 新建普通 Pod
 
