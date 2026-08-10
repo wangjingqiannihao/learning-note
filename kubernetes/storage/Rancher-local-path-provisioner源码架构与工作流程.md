@@ -223,6 +223,28 @@ PersistentVolumeSource{
 
 `provisionFor()` 返回 PV 对象后，真正将 PV 写入 API Server 的是通用 ProvisionController。之后 Kubernetes 的 PersistentVolume Controller 协调 PVC 与 PV 完成绑定。
 
+### 4.4 Scheduler 对延迟绑定 PVC 的判断
+
+当 StorageClass 使用 `WaitForFirstConsumer` 时，PVC 创建后不会立即完成动态供给。只有引用该 PVC 的 Pod 进入调度流程后，kube-scheduler 的 VolumeBinding 插件才会参与判断。
+
+这里的判断不是调用 local-path-provisioner 试创建目录，也不是检查节点真实磁盘剩余容量，而是基于 Kubernetes 已有对象做可调度性判断：
+
+1. PVC 处于未绑定状态，并且引用的 StorageClass 存在。
+2. StorageClass 的 `volumeBindingMode` 为 `WaitForFirstConsumer`，允许先选节点、后供给 PV。
+3. 候选节点满足 StorageClass 的 `allowedTopologies` 约束；如果没有配置 `allowedTopologies`，则这一层不限制节点。
+4. 对于已经绑定的 PVC，VolumeBinding 插件会检查对应 PV 的 `nodeAffinity` 是否匹配当前候选节点。
+5. 对于可匹配静态 PV 的 PVC，VolumeBinding 插件会同时检查 PV 的容量、访问模式、StorageClass、VolumeMode、Selector 和 NodeAffinity。
+
+对 local-path-provisioner 的默认用法来说，核心判断可以简化为：StorageClass 允许延迟绑定，并且候选节点没有被 StorageClass 拓扑约束排除。判断通过后，scheduler 选定节点，并给 PVC 写入注解：
+
+```text
+volume.kubernetes.io/selected-node: <node-name>
+```
+
+local-path-provisioner 监听到该注解后，才在对应节点上创建目录并生成 PV。这个 PV 随后带有 NodeAffinity，用于保证后续使用该 PV 的 Pod 仍然调度到拥有实际目录的节点。
+
+`CSIStorageCapacity` 主要用于 CSI 动态供给场景，让 scheduler 判断某个拓扑域内是否有足够容量。local-path-provisioner 不是 CSI 驱动，默认不发布 `CSIStorageCapacity`，因此这里不依赖它完成节点选择，也不会基于 PVC 请求容量做精确磁盘容量调度。
+
 ## 5. Pod 挂载流程
 
 PV 绑定以后，local-path-provisioner 不再参与 Pod 的挂载过程。
