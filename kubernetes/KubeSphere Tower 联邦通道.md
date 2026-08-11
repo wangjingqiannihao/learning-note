@@ -34,4 +34,4 @@ Tower Agent 或 Tower Server 重启时，原有 SSH 长连接会断开，需要�
 
 ## 参考实现
 
-开源代码与工作原理可查看 [kubesphere/tower](https://github.com/kubesphere/tower)。
+开源代码与工作原理可查看 kubesphere/tower。

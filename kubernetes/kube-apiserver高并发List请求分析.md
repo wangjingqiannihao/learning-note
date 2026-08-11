@@ -535,16 +535,16 @@ Block Profile 共采样到约 `2,704,334` 次 contention：
 
 | Issue / PR | 方向 | 与本文关系 |
 |---|---|---|
-| [Kubernetes #27667](https://github.com/kubernetes/kubernetes/issues/27667) | API Server、Controller 和 Client 性能总纲 | 涵盖 Protobuf、转换、缓存、锁和 GC |
-| [Kubernetes #119799](https://github.com/kubernetes/kubernetes/issues/119799) | APF 排队超过固定阈值 | 对应请求排队与取消传播 |
-| [Kubernetes PR #120222](https://github.com/kubernetes/kubernetes/pull/120222) | APF 使用请求 Context 管理排队生命周期 | 避免取消请求继续占用队列 |
-| [Kubernetes #79209](https://github.com/kubernetes/kubernetes/issues/79209) | 连接请求与底层 Trace | 解决根 Span 与存储、Webhook Trace 割裂 |
-| [Kubernetes #76219](https://github.com/kubernetes/kubernetes/issues/76219) | SSA Protobuf 序列化性能 | 深层对象和 managedFields 场景相关 |
-| [Kubernetes PR #77355](https://github.com/kubernetes/kubernetes/pull/77355) | 反向 Protobuf marshaling | 减少重复 Size 计算 |
-| [Kubernetes #110146](https://github.com/kubernetes/kubernetes/issues/110146) | JSON Watch Event 重复编码 | 高 Watch 数量下减少 CPU |
-| [Kubernetes PR #120300](https://github.com/kubernetes/kubernetes/pull/120300) | 缓存已编码 Watch Event | 多 Watcher 复用序列化结果 |
-| [Kubernetes #69540](https://github.com/kubernetes/kubernetes/issues/69540) | Admission Webhook 指标基数过高 | 降低指标内存与 GC 压力 |
-| [Kubernetes PR #69895](https://github.com/kubernetes/kubernetes/pull/69895) | 移除 Admission 指标资源标签 | 以较低维度换取可控开销 |
+| Kubernetes #27667 | API Server、Controller 和 Client 性能总纲 | 涵盖 Protobuf、转换、缓存、锁和 GC |
+| Kubernetes #119799 | APF 排队超过固定阈值 | 对应请求排队与取消传播 |
+| Kubernetes PR #120222 | APF 使用请求 Context 管理排队生命周期 | 避免取消请求继续占用队列 |
+| Kubernetes #79209 | 连接请求与底层 Trace | 解决根 Span 与存储、Webhook Trace 割裂 |
+| Kubernetes #76219 | SSA Protobuf 序列化性能 | 深层对象和 managedFields 场景相关 |
+| Kubernetes PR #77355 | 反向 Protobuf marshaling | 减少重复 Size 计算 |
+| Kubernetes #110146 | JSON Watch Event 重复编码 | 高 Watch 数量下减少 CPU |
+| Kubernetes PR #120300 | 缓存已编码 Watch Event | 多 Watcher 复用序列化结果 |
+| Kubernetes #69540 | Admission Webhook 指标基数过高 | 降低指标内存与 GC 压力 |
+| Kubernetes PR #69895 | 移除 Admission 指标资源标签 | 以较低维度换取可控开销 |
 
 ## 使用 Profile 时的注意事项
 

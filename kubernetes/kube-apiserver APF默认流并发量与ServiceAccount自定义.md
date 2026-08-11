@@ -10,9 +10,9 @@ APF 的“并发量”不是每个 FlowSchema 固定一个请求数，而是 Flo
 
 ## 版本与计算口径
 
-本文以 Kubernetes v1.34.0 的 APF 默认引导配置为基准。默认 FlowSchema 与 PriorityLevelConfiguration 来自 Kubernetes 源码中的 `staging/src/k8s.io/apiserver/pkg/apis/flowcontrol/bootstrap/default.go`，字段含义以 Kubernetes 官方 API 文档为准；不同 Kubernetes 版本或发行版可以调整这些默认对象，线上集群应以 `kubectl get flowschema` 和 `kubectl get prioritylevelconfiguration` 的实际输出为准。[Kubernetes v1.34.0 默认 APF 源码](https://raw.githubusercontent.com/kubernetes/kubernetes/v1.34.0/staging/src/k8s.io/apiserver/pkg/apis/flowcontrol/bootstrap/default.go)
+本文以 Kubernetes v1.34.0 的 APF 默认引导配置为基准。默认 FlowSchema 与 PriorityLevelConfiguration 来自 Kubernetes 源码中的 `staging/src/k8s.io/apiserver/pkg/apis/flowcontrol/bootstrap/default.go`，字段含义以 Kubernetes 官方 API 文档为准；不同 Kubernetes 版本或发行版可以调整这些默认对象，线上集群应以 `kubectl get flowschema` 和 `kubectl get prioritylevelconfiguration` 的实际输出为准。Kubernetes v1.34.0 默认 APF 源码
 
-PriorityLevel 名义 Seat 的计算方式如下，`ceil` 表示向上取整。这个计算得到的是名义额度，实际运行时还会受到 Seat 估算、排队、借入借出、请求完成速度和 kube-apiserver 实际启动参数影响。[Kubernetes PriorityLevelConfiguration API](https://kubernetes.io/docs/reference/kubernetes-api/flowcontrol/priority-level-configuration-v1/)
+PriorityLevel 名义 Seat 的计算方式如下，`ceil` 表示向上取整。这个计算得到的是名义额度，实际运行时还会受到 Seat 估算、排队、借入借出、请求完成速度和 kube-apiserver 实际启动参数影响。Kubernetes PriorityLevelConfiguration API
 
 ```text
 NominalCL(i) = ceil(ServerCL * NCS(i) / sum(NCS))

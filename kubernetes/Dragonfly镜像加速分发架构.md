@@ -4,7 +4,7 @@
 
 Dragonfly 适合解决 Kubernetes 集群内大规模镜像分发问题。它不替代私有镜像仓库，而是在 containerd 与私有 OCI Registry 之间增加一层 P2P 分发能力：每个节点运行 dfdaemon/Peer，本节点优先从其他已缓存节点获取镜像层分块，只有缓存未命中时才回源私有 Registry。这样可以把“每个节点都直接打到 Registry”的拉取模式，改成“少量节点回源、集群内部 P2P 复用”的分发模式。
 
-本文以 [Dragonfly v2.5.0](https://d7y.io/blog/2026/06/25/dragonfly-v2-5-0-has-been-released/) 为说明对象，重点关注 Kubernetes + containerd + 私有 OCI Registry 场景。本文未执行本地集群部署验证，只整理架构、组件工作方式和关键配置思路。
+本文以 Dragonfly v2.5.0 为说明对象，重点关注 Kubernetes + containerd + 私有 OCI Registry 场景。本文未执行本地集群部署验证，只整理架构、组件工作方式和关键配置思路。
 
 ![Dragonfly Kubernetes 镜像加速分发架构](images/镜像加速分发架构图.png)
 
@@ -17,7 +17,6 @@ Dragonfly 适合解决 Kubernetes 集群内大规模镜像分发问题。它不�
 | Registry 出口带宽高 | Registry 承担全部镜像层流量 | Registry 只承担缓存未命中的回源流量 |
 | 跨节点缓存无法复用 | containerd 只使用本机缓存 | dfdaemon 将节点本地缓存纳入 P2P 网络 |
 | Registry 短暂不可用 | 未缓存镜像无法拉取 | 已缓存镜像层仍可在集群内部继续分发 |
-
 
 ## P2P 含义
 
@@ -102,7 +101,6 @@ Dragonfly 的 P2P 网络可以理解为由 Scheduler 管理拓扑、由 Peer 承
 
 P2P 网络的核心收益来自“缓存传播”。第一个节点拉取镜像层时需要回源 Registry；第二个节点开始拉取时，可以从第一个节点获取部分或全部分块；随着更多节点完成下载，可供选择的父 Peer 增加，Registry 的压力逐步下降。
 
-
 ## 磁盘空间成本
 
 Dragonfly 不是零磁盘成本的镜像加速方案。普通 Kubernetes 节点本来就会在 containerd 中保存镜像内容和解包后的 snapshot；引入 Dragonfly 后，dfdaemon 还会维护一份用于 P2P 分发的可回收缓存。因此节点侧会增加额外磁盘占用。
@@ -143,14 +141,14 @@ Dragonfly 不是零磁盘成本的镜像加速方案。普通 Kubernetes 节点�
 # registry.example.com 表示私有 OCI Registry 域名。
 # containerd 访问该仓库时，优先请求本机 dfdaemon。
 
-server = "https://registry.example.com"
+server = "
 
-[host."http://127.0.0.1:65001"]
+[host."
   # 127.0.0.1:65001 表示本机 dfdaemon 暴露给 containerd 的 Registry Mirror 地址。
   # pull 表示允许通过该 mirror 拉取镜像内容。
   capabilities = ["pull", "resolve"]
 
-[host."https://registry.example.com"]
+[host."
   # 保留原始 Registry 作为兜底路径。
   # 当本机 dfdaemon 不可用或需要直接回源时，containerd 仍有权访问权威源。
   capabilities = ["pull", "resolve"]

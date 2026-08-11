@@ -386,9 +386,9 @@ containerd 2.x 推荐把镜像仓库配置放到 `certs.d/<registry>/hosts.toml`
 # 文件路径示例：/etc/containerd/certs.d/docker.io/hosts.toml
 
 # 默认 server。通常写原始 registry 地址。
-server = "https://registry-1.docker.io"
+server = "
 
-[host."https://mirror.example.com"]
+[host."
   # mirror 能力。pull 表示可拉取镜像；resolve 表示可解析 tag 到 digest；push 表示可推送。
   capabilities = ["pull", "resolve"]
 
@@ -401,7 +401,7 @@ server = "https://registry-1.docker.io"
   # 客户端证书和私钥路径。需要双向 TLS 时使用。
   client = [["/etc/containerd/certs.d/docker.io/client.crt", "/etc/containerd/certs.d/docker.io/client.key"]]
 
-  [host."https://mirror.example.com".header]
+  [host."
     # 自定义请求头。一般不需要配置；如需认证，优先使用平台支持的标准方式。
     x-custom-header = ["value"]
 ```
@@ -461,7 +461,7 @@ systemctl restart containerd
 
 ## 参考资料
 
-- [containerd v2.3.3 Release](https://github.com/containerd/containerd/releases/tag/v2.3.3)
-- [containerd CRI Plugin Config Guide](https://containerd.io/docs/2.3/cri/config/)
-- [containerd config.toml manual](https://github.com/containerd/containerd/blob/main/docs/man/containerd-config.toml.5.md)
-- [containerd Versioning and Release](https://containerd.io/releases/)
+- containerd v2.3.3 Release
+- containerd CRI Plugin Config Guide
+- containerd config.toml manual
+- containerd Versioning and Release

@@ -79,7 +79,7 @@ type RoundTripper interface {
 当 `client.Do` 返回时，响应头通常已经读取完成，但响应体不一定已经全部下载。响应体会随着调用方读取 `Response.Body` 而继续传输。
 
 ```go
-resp, err := client.Get("https://example.com/data")
+resp, err := client.Get(")
 if err != nil {
     return err
 }
@@ -114,23 +114,23 @@ type connectionKey struct {
 client := newHTTPClient()
 
 // 两个请求共享 Transport 的配置和连接调度能力。
-respA, err := client.Get("https://a.example.com/users")
-respB, err := client.Get("https://b.example.com/orders")
+respA, err := client.Get(")
+respB, err := client.Get(")
 ```
 
 它们对应不同的目标地址，因此通常使用不同的底层连接：
 
 | 请求地址 | Transport | 连接分组 | 是否通常复用同一条 TCP 连接 |
 | --- | --- | --- | --- |
-| `https://a.example.com/users` | 相同 | `a.example.com:443` | 否 |
-| `https://b.example.com/orders` | 相同 | `b.example.com:443` | 否 |
+| ` | 相同 | `a.example.com:443` | 否 |
+| ` | 相同 | `b.example.com:443` | 否 |
 
 同一个地址下的不同路径通常属于相同的连接分组：
 
 | 请求地址 | 连接分组 | 是否可以复用连接 |
 | --- | --- | --- |
-| `https://a.example.com/users` | `a.example.com:443` | 可以 |
-| `https://a.example.com/orders` | `a.example.com:443` | 可以 |
+| ` | `a.example.com:443` | 可以 |
+| ` | `a.example.com:443` | 可以 |
 
 因此，“复用 Transport”和“复用底层连接”是两个不同概念：复用 Transport 表示多个请求共享连接管理器；复用连接表示请求实际使用已有的 TCP 或 HTTP/2 连接。
 
@@ -149,7 +149,7 @@ Transport 会保存请求结束后仍可使用的连接。后续请求到达时�
 响应体与底层连接的生命周期密切相关。对于 HTTP/1.1，通常只有响应体读取完成并关闭后，Transport 才能确认连接可以安全回到空闲连接池。
 
 ```go
-resp, err := client.Get("https://example.com/data")
+resp, err := client.Get(")
 if err != nil {
     return err
 }

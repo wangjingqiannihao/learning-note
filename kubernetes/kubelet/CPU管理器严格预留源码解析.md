@@ -8,7 +8,7 @@
 
 本文源码对照版本为 Kubernetes `v1.34.10` tag，对应 release commit `bd6c4ad1`。分析时已切换到该 tag 的 detached HEAD 状态确认关键代码路径，包括 `pkg/kubelet/cm/cpumanager/policy_static.go` 中 `validateState()` 的 `allCPUs.Difference(p.reservedCPUs)` 逻辑、`pkg/kubelet/cm/cpumanager/policy_options.go` 中 `StrictCPUReservationOption` 的解析，以及 `pkg/kubelet/cm/internal_container_lifecycle_linux.go` 中 `PreCreateContainer()` 写入 `containerConfig.Linux.Resources.CpusetCpus` 的链路。
 
-`strict-cpu-reservation` 最早在 Kubernetes `v1.32` 作为 alpha 特性引入，使用时需要同时配置 `cpuManagerPolicyOptions.strict-cpu-reservation: "true"`，并开启 `CPUManagerPolicyAlphaOptions` feature gate。到后续版本后，该选项的 feature gate 阶段会随版本演进变化；本文使用 `v1.34.10` tag 做源码对照，是为了固定代码位置和字段名称，避免直接引用 master 分支造成行号或实现细节漂移。该特性的专门增强提案可以跟踪 KEP-4540：`https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/4540-strict-cpu-reservation`；CPU Manager 相关背景也可以参考 KEP-3570：`https://github.com/kubernetes/enhancements/issues/3570`。
+`strict-cpu-reservation` 最早在 Kubernetes `v1.32` 作为 alpha 特性引入，使用时需要同时配置 `cpuManagerPolicyOptions.strict-cpu-reservation: "true"`，并开启 `CPUManagerPolicyAlphaOptions` feature gate。到后续版本后，该选项的 feature gate 阶段会随版本演进变化；本文使用 `v1.34.10` tag 做源码对照，是为了固定代码位置和字段名称，避免直接引用 master 分支造成行号或实现细节漂移。该特性的专门增强提案可以跟踪 KEP-4540：` Manager 相关背景也可以参考 KEP-3570：`
 
 ```bash
 # 示例：切换到本文参考的 Kubernetes 版本。
