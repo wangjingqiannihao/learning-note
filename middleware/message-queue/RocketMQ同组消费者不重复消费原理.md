@@ -24,27 +24,32 @@ RocketMQ 的 Topic 不是一个单一队列，而是由多个 MessageQueue 组�
 
 这个模型更接近 Kafka 的分区消费模型，而不是多个消费者直接竞争同一个队列里的每条消息。
 
-## Rebalance：队列归属的计算过程
+## Rebalance：队列到底怎么分给消费者
 
-当消费者启动、退出、宕机恢复，或者 Topic 队列数量变化时，ConsumerGroup 会触发 Rebalance。Rebalance 会让同组内每个消费者基于同一份成员列表和队列列表，用相同的分配算法计算自己应该负责哪些 MessageQueue。
+先把 Rebalance 理解成“按顺序发牌”。RocketMQ 会先拿到两份名单：一份是 Topic 下所有 MessageQueue，另一份是同一个 ConsumerGroup 里的所有消费者。然后把两份名单都按固定顺序排好，再用同一个分配算法，把队列像发牌一样分给消费者。
 
-常见过程如下：
+![Rebalance 队列分配计算示例](images/重平衡队列分配计算示例.png)
 
-1. 消费者向 Broker 注册自己所属的 ConsumerGroup。
-2. 同组消费者获取当前 ConsumerGroup 的消费者实例列表。
-3. 消费者获取目标 Topic 下的 MessageQueue 列表。
-4. 每个消费者使用相同的 AllocateMessageQueueStrategy 计算队列分配结果。
-5. 消费者只拉取分配给自己的 MessageQueue。
-6. 有消费者加入或离开时，重新执行上述分配过程。
+用一个具体例子看最清楚：Topic A 有 6 个队列，分别是 Queue 0 到 Queue 5；ConsumerGroup G 里有 3 个消费者，分别是 Consumer 1、Consumer 2、Consumer 3。默认平均分配时，6 个队列除以 3 个消费者，每个消费者拿 2 个队列。
 
-默认分配策略会尽量平均分配 MessageQueue。队列数量大于消费者数量时，一个消费者会持有多个队列；消费者数量大于队列数量时，会有部分消费者暂时分不到队列。
-
-| 场景 | 分配结果 | 影响 |
+| 消费者 | 分到的队列 | 它会拉取哪些消息 |
 | --- | --- | --- |
-| 4 个队列，2 个消费者 | 每个消费者约 2 个队列 | 消费能力能横向扩展 |
-| 4 个队列，4 个消费者 | 每个消费者约 1 个队列 | 并行度接近队列数 |
-| 4 个队列，8 个消费者 | 最多 4 个消费者有队列 | 超过队列数的消费者空闲 |
-| 消费者宕机 | 宕机消费者的队列转移给其他消费者 | 触发重平衡，短时间可能重复消费 |
+| Consumer 1 | Queue 0、Queue 1 | 只拉 Queue 0、Queue 1 里的消息 |
+| Consumer 2 | Queue 2、Queue 3 | 只拉 Queue 2、Queue 3 里的消息 |
+| Consumer 3 | Queue 4、Queue 5 | 只拉 Queue 4、Queue 5 里的消息 |
+
+这里的关键点是：每个消费者算出来的结果是一致的。Consumer 1 算完后知道自己只负责 Queue 0、Queue 1；Consumer 2 算完后知道自己只负责 Queue 2、Queue 3。它们不会都去拉 Queue 0，所以同一个 ConsumerGroup 内稳定状态下不会重复拉同一个队列。
+
+如果队列不能刚好平均分，也按“尽量平均”的方式连续分。例如 5 个队列、2 个消费者时，可以理解成 Consumer 1 多拿一个队列：
+
+| 消费者 | 分到的队列 |
+| --- | --- |
+| Consumer 1 | Queue 0、Queue 1、Queue 2 |
+| Consumer 2 | Queue 3、Queue 4 |
+
+如果消费者比队列还多，例如 4 个队列、8 个消费者，最多只有 4 个消费者能分到队列，剩下的消费者没有队列可拉，所以继续加消费者不会继续提升并发。RocketMQ 的同组消费并发上限，本质上受 MessageQueue 数量限制。
+
+消费者新增、下线或宕机时，会重新发牌。原来属于 Consumer 1 的队列，可能会转给 Consumer 2。队列归属会变，但同一时刻一个队列仍只归一个消费者负责。重复消费风险主要来自“业务处理成功了，但 offset 还没提交成功”这个窗口，而不是来自稳定状态下多个消费者同时抢同一个队列。
 
 ## 消费位点：按组和队列记录进度
 
