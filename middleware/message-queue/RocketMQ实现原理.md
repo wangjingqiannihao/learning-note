@@ -25,6 +25,58 @@ RocketMQ 由 NameServer、Broker、Producer 和 Consumer 四类核心角色组�
 
 NameServer 不参与消息正文的存储和转发，因此 NameServer 故障不会直接导致已经在 Broker 落盘的消息丢失。
 
+## 高可用实现
+
+RocketMQ 5.x 的高可用由 NameServer 多节点、Broker 副本、Controller 自动切换、消息持久化以及客户端故障恢复共同实现。各机制负责不同的故障范围，不能相互替代。
+
+![RocketMQ 5.x 高可用架构](images/RocketMQ高可用架构图.png)
+### NameServer 路由高可用
+
+NameServer 采用无状态多节点部署，节点之间不复制路由数据，也不通过一致性协议同步。Broker 启动后会向配置的每个 NameServer 独立注册 Broker 地址、主从关系以及 Topic 路由，并默认约每 30 秒重新注册一次。一次注册失败后，下一轮会继续尝试，因此路由最终能够恢复。
+
+NameServer 会记录 Broker 最近一次正常通信的时间。Broker 连接关闭时会触发路由清理；连接未正常关闭但约 120 秒没有续约时，NameServer 也会将其判定为不可用并剔除。生产者和消费者在本地缓存路由，单个 NameServer 短暂故障时仍可使用已有路由访问 Broker。
+
+该机制保证最终一致，而不是强一致。在 Broker 已经故障但 NameServer 尚未完成剔除的窗口内，客户端可能获得旧地址。生产者发送失败后会刷新路由并重试其他可写 MessageQueue。
+
+### Broker 副本与自动切换
+
+一个 Broker 副本组包含一个 Master 和多个 Slave。消息写入 Master 后复制到 Slave。RocketMQ 5.x 使用 Controller 维护副本组状态；Master 故障后，Controller 从符合条件的副本中选出新 Master，Broker 随后向 NameServer 更新路由，生产者和消费者刷新路由后继续收发消息。
+
+同步复制在副本确认后才返回成功，数据可靠性更高；异步复制在 Master 本地写入完成后返回，吞吐量更高，但 Master 突然故障时存在丢失少量消息的风险。
+
+### 刷盘与数据可靠性
+
+RocketMQ 5.x 默认使用异步刷盘：
+
+```properties
+# 默认值。消息写入内存映射区域后即可返回，由后台线程刷入磁盘。
+flushDiskType=ASYNC_FLUSH
+```
+
+异步刷盘具有更高吞吐量，但数据尚未落盘时机器突然掉电，可能丢失少量已经返回成功的消息。对消息落盘要求严格时，可以改为同步刷盘：
+
+```properties
+# 消息写入本机磁盘后才向生产者返回成功。
+flushDiskType=SYNC_FLUSH
+```
+
+刷盘与副本复制解决的问题不同：刷盘保证消息从内存写入本机磁盘，副本复制保证消息保存到其他 Broker。Controller 负责故障检测和主节点切换，不会自动改变刷盘方式。
+
+### 生产与消费链路恢复
+
+Topic 通常在多个 Broker 上创建多个 MessageQueue。生产者发送失败后会重新获取路由并重试其他可写队列，因此单个 Broker 故障不会中断整个 Topic 的写入。发送重试可能产生重复消息，消费端必须基于业务唯一键实现幂等。
+
+同一消费组中的多个消费者共同分配 MessageQueue。消费者实例故障后，客户端会重新均衡，将其负责的队列分配给其他实例。消费失败的消息进入重试流程，超过最大重试次数后进入死信队列。
+
+### Master 故障恢复过程
+
+1. Controller 检测到原 Master 不可用。
+2. Controller 从符合条件的副本中选出新 Master。
+3. Broker 向所有 NameServer 更新路由信息。
+4. 生产者刷新路由，将消息发送到新 Master。
+5. 消费者重新连接并继续消费。
+6. 原 Master 恢复后以副本身份重新加入并同步数据。
+
 ## Broker 存储目录
 
 Broker 的消息数据默认存放在 `storePathRootDir` 指定的目录中，常见默认位置是 `${user.home}/store`。
@@ -77,6 +129,47 @@ IndexFile 主要用于问题排查、消息追踪和管理查询，不是正常�
 ### 发送阶段
 
 Producer 从 NameServer 获取 Topic 路由，根据队列选择策略确定 MessageQueue，并将消息发送到对应 Broker。
+
+#### MessageQueue 的读写关系与数量规划
+
+Producer 写入和 Consumer 读取的是同一套 MessageQueue，不存在两类不同的队列。一个 MessageQueue 由 `Topic + BrokerName + QueueId` 唯一确定。Producer 数量不决定使用几个 MessageQueue：默认发送会在多个可写 MessageQueue 之间轮转；只有显式指定队列或根据业务键固定路由时，相关消息才会持续进入同一个 MessageQueue。
+
+Producer 所说的“写入 MessageQueue”，实际表示 Broker 将完整消息写入 CommitLog，并在指定 `Topic + QueueId` 对应的 ConsumeQueue 中建立索引。Consumer 被分配该 MessageQueue 后，先按消费位点读取 ConsumeQueue，再根据索引中的物理偏移量从 CommitLog 读取完整消息。
+
+`writeQueueNums` 表示 Producer 可以选择并写入的队列数量，`readQueueNums` 表示 Consumer 可以分配并读取的队列数量。两者不是不同的物理队列，生产环境应保持相等。如果写队列多于读队列，Producer 可能把消息写入 Consumer 无法发现的 QueueId；如果读队列多于写队列，多出的队列不会接收新消息。
+
+| 对比项 | Producer | Consumer |
+| --- | --- | --- |
+| 面向对象 | Topic 下的可写 MessageQueue | 消费组分配给当前实例的可读 MessageQueue |
+| 主要操作 | 选择队列并发送消息 | 按消费位点拉取消息 |
+| 队列分配方式 | 默认在可写队列间轮转 | 消费组内通过重新均衡分配 |
+| 消费进度 | 不维护 | 每个消费组独立维护 |
+
+多个消费组可以读取同一个 MessageQueue，但分别维护自己的消费位点，因此能够独立消费同一批消息，互不影响。消费失败后产生的重试队列和死信队列属于另外的 Topic，不是 Producer 最初写入的 MessageQueue。
+
+Topic 的 MessageQueue 总数等于各 Broker 上该 Topic 队列数量之和。如果 Topic 部署在 3 个 Broker，每个 Broker 配置 8 个读写队列，那么整个 Topic 共有 24 个 MessageQueue。
+
+队列数量没有适用于所有业务的固定值，应根据最大消费者实例数、生产峰值 TPS、消费峰值 TPS 和压测得到的单队列稳定吞吐量确定：
+
+```text
+总队列数 ≥ 最大消费者实例数
+总队列数 ≥ 峰值生产 TPS ÷ 单队列稳定写入 TPS
+总队列数 ≥ 峰值消费 TPS ÷ 单队列稳定消费 TPS
+```
+
+普通业务在缺少压测数据时，可以从每个 Broker 4～8 个读写队列起步，并保持 `readQueueNums = writeQueueNums`。高吞吐业务必须根据压测结果计算，不能直接创建大量队列。队列过多会增加路由数据、ConsumeQueue、消费位点和重新均衡的管理成本。
+
+RocketMQ 不会根据 Topic 流量或消费者数量动态计算队列数。开启自动创建 Topic 时，Broker 的 `defaultTopicQueueNums` 默认是 8，经典 Java Producer 请求自动创建 Topic 时携带的 `defaultTopicQueueNums` 默认是 4。Broker 会取两个默认值中的较小值：
+
+```text
+实际队列数 = min(Producer 默认值, Broker 默认值)
+           = min(4, 8)
+           = 4
+```
+
+因此，默认通常会在实际创建该 Topic 的 Broker 上建立 4 个读队列和 4 个写队列。该数量不是根据负载动态计算出来的，只是默认配置产生的结果。生产环境不应依赖首次发送触发自动创建，应关闭自动创建并通过管理工具显式指定 Topic 所在 Broker、读队列数和写队列数。
+
+扩容时应同时增加读写队列。缩容前必须停止向待移除 QueueId 写入，并确认存量消息消费完成。使用 `hash(业务键) % 队列总数` 路由顺序消息时，调整队列数量会改变取模结果，可能破坏变更前后的连续顺序。
 
 ### 存储阶段
 
