@@ -85,6 +85,26 @@ apiserver-loopback-client
 
 生成后的证书被注册为 SNI 证书，并放在 SNI 证书列表最前面。内部客户端虽然连接 `127.0.0.1` 或本机 IPv6 loopback 地址，但 TLS ClientHello 携带的 SNI 和校验名称都是 `apiserver-loopback-client`。kube-apiserver 因此返回专用的 loopback 证书，而不是磁盘中的 `apiserver.crt`。
 
+客户端指定的 SNI 就是其 TLS 配置中的 `ServerName`。未显式指定时，客户端一般使用连接目标的主机名；Go 标准库则通过 `tls.Config.ServerName` 显式设置。这个值具有两个作用：TLS ClientHello 会把它作为 SNI 发送给服务端，客户端还会用它校验服务端证书中的 DNS 名称。
+
+kube-apiserver 的 loopback 客户端在 `rest.Config` 中设置：
+
+```go
+TLSClientConfig: rest.TLSClientConfig{
+    ServerName: "apiserver-loopback-client",
+}
+```
+
+该配置最终会转换为 Go 标准库的 `tls.Config.ServerName`。因此，即使实际 TCP 连接目标是 `127.0.0.1:6443`，ClientHello 中的 SNI 仍固定为 `apiserver-loopback-client`，从而命中内存中的 loopback SNI 证书；客户端也使用同一个名称校验证书。
+
+使用 OpenSSL 测试时，`-servername apiserver-loopback-client` 用于显式指定 SNI。curl 没有单独的 `ServerName` 参数，SNI 默认取 URL 中的主机名；若客户端已经信任该自签名证书，要连接 `127.0.0.1`，同时让 SNI 和证书校验名称保持为 `apiserver-loopback-client`，可以通过 `--resolve` 把该名称解析到目标地址：
+
+```bash
+curl --resolve apiserver-loopback-client:6443:127.0.0.1 https://apiserver-loopback-client:6443/
+```
+
+`--connect-to` 也可以只改变实际连接地址，同时保留 URL 主机名作为 SNI 和证书校验名称。
+
 loopback 客户端配置同时把该证书放入 `CAData`，从而直接信任这张自签名证书。客户端身份认证仍由启动时生成的随机 Bearer Token 完成。两者职责不同：loopback 证书负责 TLS 服务端身份验证，Bearer Token 负责客户端身份认证。
 
 在 Kubernetes v1.34.0 中，loopback 证书有效期为 `1096` 天，即约三年。证书和私钥不会写入 `/etc/kubernetes/pki`，也不会被 `kubeadm certs check-expiration` 管理。kube-apiserver 重启后会重新生成证书、私钥和有效期。
