@@ -109,6 +109,38 @@ loopback 客户端配置同时把该证书放入 `CAData`，从而直接信任�
 
 在 Kubernetes v1.34.0 中，loopback 证书有效期为 `1096` 天，即约三年。证书和私钥不会写入 `/etc/kubernetes/pki`，也不会被 `kubeadm certs check-expiration` 管理。kube-apiserver 重启后会重新生成证书、私钥和有效期。
 
+## 为什么需要 loopback 证书
+
+kube-apiserver 进程内部有一部分控制逻辑不会直接调用底层存储函数，而是使用 Kubernetes Client 重新请求自身 API。因此，kube-apiserver 在这些流程中同时扮演 HTTPS 服务端和客户端。
+
+内部客户端连接的是 `127.0.0.1`、本机 IPv6 loopback 地址或本地绑定地址，而磁盘中的对外服务端证书不一定包含这些地址。专用 loopback 证书通过固定 SNI `apiserver-loopback-client` 消除本机地址与证书 SAN 不匹配的问题，也使内部访问不依赖外部 DNS、负载均衡、Service IP 和集群网络。
+
+内部调用仍然通过标准 Kubernetes API 处理链路。loopback 证书负责验证 HTTPS 服务端身份，随机 Bearer Token 负责客户端身份认证；请求进入 kube-apiserver 后，继续经过认证、授权、准入、审计和存储流程。
+
+![kube-apiserver loopback 调用链](images/kube-apiserver-loopback调用链.png)
+
+## 哪些流程会触发 loopback 调用
+
+具体控制器会随 Kubernetes 版本和启用的 API 功能变化，但判断标准保持一致：只要 kube-apiserver 进程内部的组件使用 `LoopbackClientConfig` 创建客户端并访问自身 API，就会触发 loopback TLS 连接。
+
+| 场景或流程 | 是否使用 loopback | 主要操作 | 说明 |
+|---|---:|---|---|
+| Post-Start Hook | 是 | 初始化、等待同步 | 启动内部控制器并执行 API Server 启动后的初始化任务 |
+| 默认资源 Bootstrap | 是 | Create、Get、Update | 创建或维护默认 Namespace、`kubernetes` Service 等系统资源 |
+| API Aggregation | 是 | List、Watch、Update | 维护 `APIService` 注册、可用性状态和 OpenAPI 聚合 |
+| CRD 与 API Extensions | 是 | List、Watch、Update | 监听 CRD，维护发现信息和相关资源状态 |
+| OpenAPI 与 Discovery | 是 | List、Watch、刷新 | 聚合并刷新 API 定义和发现信息 |
+| StorageVersion 管理 | 是 | List、Watch、Update | 读取和维护 API 存储版本信息 |
+| API Priority and Fairness | 是 | List、Watch、Update | 监听并维护流量控制相关资源 |
+| 内部 Informer | 是 | List、Watch | 为 kube-apiserver 内部控制器提供资源缓存和事件 |
+| `kubectl` 访问 kube-apiserver | 否 | 用户 API 请求 | 使用 kubeconfig 中配置的 CA、客户端证书、Token 或认证插件 |
+| Kubelet、Scheduler、Controller Manager | 否 | 组件 API 请求 | 使用各自 kubeconfig 中的客户端凭据 |
+| Pod 访问 `kubernetes.default.svc` | 否 | Pod API 请求 | 使用 ServiceAccount Token 和集群 CA |
+| kube-apiserver 访问 etcd | 否 | 存储读写 | 使用 etcd CA 和 apiserver-etcd-client 证书 |
+| kube-apiserver 访问 Kubelet | 否 | logs、exec、attach 等 | 使用 apiserver-kubelet-client 证书 |
+
+一次典型调用的关键链路是：内部组件通过 `LoopbackClientConfig` 连接本机安全端口，TLS ClientHello 携带 `apiserver-loopback-client` SNI，服务端返回内存中的 loopback 证书；TLS 建立后，客户端携带随机 Bearer Token 发出 API 请求，请求随后进入 kube-apiserver 的标准处理链路。
+
 ## 非 kube-apiserver 调用者能否使用 loopback 连接
 
 非 kube-apiserver 进程可以触发并接收 loopback 服务端证书。kube-apiserver 根据 TLS ClientHello 中的 SNI 选择服务端证书，不会在 TLS 层判断连接是否由自身进程发起。只要调用者能访问 kube-apiserver 的 HTTPS 端口，并把 SNI 设置为 `apiserver-loopback-client`，kube-apiserver 就会返回内存中的 loopback 自签名证书。
